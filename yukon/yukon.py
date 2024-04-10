@@ -10,6 +10,8 @@ QUEEN = 12
 JACK = 11
 ACE = 1
 
+SUIT_WIDTH = 1
+
 
 class Suit(Enum):
     _init_ = "value suitname nickname"
@@ -20,14 +22,16 @@ class Suit(Enum):
 
 
 class Card:
+    SUIT_WIDTH = SUIT_WIDTH
+
     def __init__(self, suit, number):
         self.__suit = suit
         self.__number = number
         self.__checkrep()
-    
+
     def __checkrep(self):
         assert 1 <= self.__number <= 13, f"number is {self.__number}"
-    
+
     def is_red(self):
         self.__checkrep()
         return self.__suit in [Suit.HEARTS, Suit.DIAMONDS]
@@ -35,17 +39,16 @@ class Card:
     def suit(self):
         self.__checkrep()
         return self.__suit
-    
+
     def number(self):
         self.__checkrep()
         return self.__number
-    
+
     # https://stackoverflow.com/questions/390250/elegant-ways-to-support-equivalence-equality-in-python-classes
     def __eq__(self, other):
         """Overrides the default implementation"""
         if isinstance(other, Card):
-            return self.number() == other.number() and \
-                self.suit() == other.suit()
+            return self.number() == other.number() and self.suit() == other.suit()
         return NotImplemented
 
     def __ne__(self, other):
@@ -58,24 +61,37 @@ class Card:
     def __hash__(self):
         """Overrides the default implementation"""
         return hash(tuple(sorted(self.__dict__.items())))
-    
+
     def __repr__(self) -> str:
         return Card.display(self)
-    
+
     @staticmethod
-    def display(card, highlight_function=lambda _:False):
+    def display(card, highlight_function=lambda _: False):
         if card is None:
             return "---"
         elif isinstance(card, Card):
-            numberstr = str(card.number()).rjust(2)
-            if card.__number == ACE:
-                numberstr = " A"
-            if card.__number == JACK:
-                numberstr = " J"
-            if card.__number == QUEEN:
-                numberstr = " Q"
-            if card.__number == KING:
-                numberstr = " K"
+            numberstr = str(card.number())
+            if Card.SUIT_WIDTH == 2:
+                if card.__number == ACE:
+                    numberstr = "A"
+                if card.__number == 10:
+                    numberstr = "T"
+                if card.__number == JACK:
+                    numberstr = "J"
+                if card.__number == QUEEN:
+                    numberstr = "Q"
+                if card.__number == KING:
+                    numberstr = "K"
+            else:
+                numberstr = str(card.number()).rjust(2)
+                if card.__number == ACE:
+                    numberstr = " A"
+                if card.__number == JACK:
+                    numberstr = " J"
+                if card.__number == QUEEN:
+                    numberstr = " Q"
+                if card.__number == KING:
+                    numberstr = " K"
             suitstr = card.suit().nickname
             cardstr = numberstr + suitstr
             if card.is_red():
@@ -90,15 +106,14 @@ class Card:
                     return colored(cardstr, "black")
         else:
             raise NotImplementedError
-        
-    
+
     @staticmethod
     def lower_card(card):
         if card.number() != 1:
-            return Card(card.suit(), card.number()-1)
+            return Card(card.suit(), card.number() - 1)
         else:
             return None
-    
+
     def opposite_color(self, other):
         if isinstance(other, Card):
             return self.is_red() != other.is_red()
@@ -107,15 +122,18 @@ class Card:
 class Foundation:
     def __init__(self):
         self.foundations = {e: None for e in Suit}
-    
+
     def __repr__(self) -> str:
-        return "\n".join([f"{suit.nickname}: {Card.display(card)}" \
-                          for suit, card in self.foundations.items()])
+        return "\n".join(
+            [
+                f"{'' if Card.SUIT_WIDTH == 2 else ' '}{suit.nickname}: {Card.display(card)}"
+                for suit, card in self.foundations.items()
+            ]
+        )
 
     def can_build(self, card):
-        return Card.lower_card(card) in self.foundations.values() \
-            or card.number() == ACE
-    
+        return Card.lower_card(card) in self.foundations.values() or card.number() == ACE
+
     def build(self, card):
         if not self.can_build(card):
             raise ValueError
@@ -135,7 +153,7 @@ class Pile:
         self.visible = visible
         if self.visible > len(cards):
             raise ValueError
-    
+
     def find(self, card):
         """
         returns index, is_visible
@@ -148,20 +166,24 @@ class Pile:
                 return index, True
         else:
             return None, False
-    
+
     def __checkrep(self):
-        assert self.visible <= len(self.cards), f"visible cards: {self.visible}, total cards: {len(self.cards)}"
+        assert self.visible <= len(
+            self.cards
+        ), f"visible cards: {self.visible}, total cards: {len(self.cards)}"
 
     def __repr__(self):
         self.__checkrep()
-        cardstrs = ["xXx"] * (len(self.cards) - self.visible) + [card.__repr__() for card in self.visible_cards()]
+        cardstrs = ["xXx"] * (len(self.cards) - self.visible) + [
+            card.__repr__() for card in self.visible_cards()
+        ]
         return " ".join(cardstrs)
-    
+
     def is_empty(self):
         self.__checkrep()
         return len(self.cards) == 0
-    
-    def display_card(self, index, highlight_function=lambda _:False):
+
+    def display_card(self, index, highlight_function=lambda _: False):
         self.__checkrep()
         if index >= len(self.cards):
             return "   "
@@ -169,17 +191,17 @@ class Pile:
             return colored("xXx", "blue")
         else:
             return Card.display(self.cards[index], highlight_function)
-    
+
     def visible_cards(self):
         self.__checkrep()
-        return self.cards[-self.visible:]
-    
+        return self.cards[-self.visible :]
+
     def pop_cards(self, count):
         self.__checkrep()
         if count > len(self.cards) or count > self.visible:
             raise ValueError
-        popped = self.cards[len(self.cards)-count:]
-        self.cards = self.cards[:len(self.cards)-count]
+        popped = self.cards[len(self.cards) - count :]
+        self.cards = self.cards[: len(self.cards) - count]
         self.visible = self.visible - count
         if self.visible < 1:
             self.visible = 1
@@ -191,9 +213,9 @@ class Pile:
         self.__checkrep()
         if count > len(self.cards) or count > self.visible:
             raise ValueError
-        popped = self.cards[len(self.cards)-count:]
+        popped = self.cards[len(self.cards) - count :]
         return popped
-    
+
     def can_add_cards(self, cards):
         self.__checkrep()
         if len(cards) == 0:
@@ -214,12 +236,12 @@ class Pile:
         else:
             self.cards = self.cards + cards
             self.visible += len(cards)
-        
+
 
 deck = [Card(suit, number) for suit in Suit for number in range(1, 14)]
 
-CA = ACE_OF_CLUBS =   Card(Suit.CLUBS, ACE)
-C2 = TWO_OF_CLUBS =   Card(Suit.CLUBS, 2)
+CA = ACE_OF_CLUBS = Card(Suit.CLUBS, ACE)
+C2 = TWO_OF_CLUBS = Card(Suit.CLUBS, 2)
 C3 = THREE_OF_CLUBS = Card(Suit.CLUBS, 3)
 C4 = FOUR_OF_CLUBS = Card(Suit.CLUBS, 4)
 C5 = FIVE_OF_CLUBS = Card(Suit.CLUBS, 5)
@@ -232,8 +254,8 @@ CJ = JACK_OF_CLUBS = Card(Suit.CLUBS, JACK)
 CQ = QUEEN_OF_CLUBS = Card(Suit.CLUBS, QUEEN)
 CK = KING_OF_CLUBS = Card(Suit.CLUBS, KING)
 
-DA = ACE_OF_DIAMONDS =   Card(Suit.DIAMONDS, ACE)
-D2 = TWO_OF_DIAMONDS =   Card(Suit.DIAMONDS, 2)
+DA = ACE_OF_DIAMONDS = Card(Suit.DIAMONDS, ACE)
+D2 = TWO_OF_DIAMONDS = Card(Suit.DIAMONDS, 2)
 D3 = THREE_OF_DIAMONDS = Card(Suit.DIAMONDS, 3)
 D4 = FOUR_OF_DIAMONDS = Card(Suit.DIAMONDS, 4)
 D5 = FIVE_OF_DIAMONDS = Card(Suit.DIAMONDS, 5)
@@ -246,8 +268,8 @@ DJ = JACK_OF_DIAMONDS = Card(Suit.DIAMONDS, JACK)
 DQ = QUEEN_OF_DIAMONDS = Card(Suit.DIAMONDS, QUEEN)
 DK = KING_OF_DIAMONDS = Card(Suit.DIAMONDS, KING)
 
-SA = ACE_OF_SPADES =   Card(Suit.SPADES, ACE)
-S2 = TWO_OF_SPADES =   Card(Suit.SPADES, 2)
+SA = ACE_OF_SPADES = Card(Suit.SPADES, ACE)
+S2 = TWO_OF_SPADES = Card(Suit.SPADES, 2)
 S3 = THREE_OF_SPADES = Card(Suit.SPADES, 3)
 S4 = FOUR_OF_SPADES = Card(Suit.SPADES, 4)
 S5 = FIVE_OF_SPADES = Card(Suit.SPADES, 5)
@@ -260,8 +282,8 @@ SJ = JACK_OF_SPADES = Card(Suit.SPADES, JACK)
 SQ = QUEEN_OF_SPADES = Card(Suit.SPADES, QUEEN)
 SK = KING_OF_SPADES = Card(Suit.SPADES, KING)
 
-HA = ACE_OF_HEARTS =   Card(Suit.HEARTS, ACE)
-H2 = TWO_OF_HEARTS =   Card(Suit.HEARTS, 2)
+HA = ACE_OF_HEARTS = Card(Suit.HEARTS, ACE)
+H2 = TWO_OF_HEARTS = Card(Suit.HEARTS, 2)
 H3 = THREE_OF_HEARTS = Card(Suit.HEARTS, 3)
 H4 = FOUR_OF_HEARTS = Card(Suit.HEARTS, 4)
 H5 = FIVE_OF_HEARTS = Card(Suit.HEARTS, 5)
@@ -275,10 +297,10 @@ HQ = QUEEN_OF_HEARTS = Card(Suit.HEARTS, QUEEN)
 HK = KING_OF_HEARTS = Card(Suit.HEARTS, KING)
 
 card_shortcut_dict = {
-    "10C": C10, 
-    "10D": D10, 
-    "10S": S10, 
-    "10H": H10, 
+    "10C": C10,
+    "10D": D10,
+    "10S": S10,
+    "10H": H10,
     "AC": CA,
     "2C": C2,
     "3C": C3,
@@ -352,50 +374,58 @@ class Tableau:
             Pile(deck[31:41], 5),
             Pile(deck[41:52], 5),
         ]
-    
+
     def find(self, card):
         """
         assumes no duplicates
         returns pile, index, is_visible
         """
-        res = list(filter(lambda x: (x[1] is not None), 
-                    ((i, *pile.find(card)) for i, pile in enumerate(self.piles))))
+        res = list(
+            filter(
+                lambda x: (x[1] is not None),
+                ((i, *pile.find(card)) for i, pile in enumerate(self.piles)),
+            )
+        )
         if len(res) == 1:
             return res[0]
         elif len(res) == 0:
-            return (None, None, False) 
+            return (None, None, False)
         else:
             raise ValueError
-    
+
 
 class Board:
     Location = namedtuple("Location", "pile_index row_index")
+
     def __init__(self, deck):
         self.tableau = Tableau(deck)
         self.foundation = Foundation()
-    
+
     def __repr__(self):
         return self.display()
-    
+
     def show(self, *highlight_cards):
         print(self.display(highlight_cards))
-    
+
     def display(self, highlight_cards=[]):
         def highlight_function(card):
             return card in highlight_cards
-        board = "         0    1    2    3    4    5    6\n"
+
+        board = "          0    1    2    3    4    5    6\n"
         row = 0
         foundation = list(self.foundation.foundations.items())
+        space = "" if Card.SUIT_WIDTH == 2 else " "
         for row in range(max(4, max([len(pile.cards) for pile in self.tableau.piles]))):
             if row < 4:
-                board += f"{foundation[row][0].nickname}: {Card.display(foundation[row][1])}"
+                board += f"{space}{foundation[row][0].nickname}: {Card.display(foundation[row][1])}"
             else:
-                board += "      "
+                board += "       "
             board += "  {}  {}  {}  {}  {}  {}  {}".format(
-                *[pile.display_card(row, highlight_function) for pile in self.tableau.piles])
+                *[pile.display_card(row, highlight_function) for pile in self.tableau.piles]
+            )
             board += f" {str(row).rjust(3)}\n"
         return board
-    
+
     def t(self, from_pile, to_pile, num_cards=None):
         if num_cards is None:
             num_cards = self.tableau.piles[from_pile].visible
@@ -406,10 +436,12 @@ class Board:
             return True
         else:
             return False
-    
+
     def tableau_move(self, from_location, to_location):
         if isinstance(to_location, Board.Location):
-            assert to_location.row_index == len(self.tableau.piles[to_location.pile_index].cards)-1
+            assert (
+                to_location.row_index == len(self.tableau.piles[to_location.pile_index].cards) - 1
+            )
             to_pile_index = to_location.pile_index
         else:
             to_pile_index = to_location
@@ -418,7 +450,9 @@ class Board:
         return self.t(from_location.pile_index, to_pile_index, num_cards)
 
     def foundation_move(self, from_location):
-        assert from_location.row_index == len(self.tableau.piles[from_location.pile_index].cards)-1
+        assert (
+            from_location.row_index == len(self.tableau.piles[from_location.pile_index].cards) - 1
+        )
         return self.f(from_location.pile_index)
 
     def f(self, from_pile):
@@ -429,11 +463,11 @@ class Board:
             return True
         else:
             return False
-    
+
     def build_foundations(self):
         while any((self.f(i) for i, pile in enumerate(self.tableau.piles) if not pile.is_empty())):
             pass
-    
+
     def find(self, card):
         pile_index, index, is_visible = self.tableau.find(card)
         if pile_index is not None and index is not None:
@@ -443,14 +477,14 @@ class Board:
                 print(f"{card} is not visible")
         else:
             print(f"{card} is in the foundations")
-    
+
     def locate(self, card):
         pile_index, index, is_visible = self.tableau.find(card)
         if pile_index is not None and index is not None and is_visible:
             return Board.Location(pile_index, index)
         else:
             return None
-        
+
     def parse_command(self, command):
         """
         <from_card|from_pile> <to_card|to_pile|f(oundation)>
@@ -520,11 +554,9 @@ class Board:
             print("Something did not work in the parsing.")
             raise ValueError
 
-        
-    
-
 
 b = board = Board(shuffled(deck))
+
 
 def play():
     b = Board(shuffled(deck))
@@ -542,5 +574,7 @@ def play():
         except:
             pass
 
+
 if __name__ == "__main__":
     play()
+
