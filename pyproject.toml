@@ -1,0 +1,8 @@
+[project]
+name = "cards"
+version = "0.0.0"
+description = "A collection of terminal card games."
+
+[build-system]
+build-backend = "flit_core.buildapi"
+requires = ["flit_core >=3.2,<4"]
