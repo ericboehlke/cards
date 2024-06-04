@@ -1,7 +1,19 @@
 [project]
 name = "cards"
+authors = [
+  {name = "Eric Boehlke"},
+]
 version = "0.0.0"
 description = "A collection of terminal card games."
+dependencies = [
+  "aenum",
+  "termcolor",
+]
+readme = "README.md"
+
+[project.scripts]
+cribbage = "cards.cribbage.cli:main"
+yukon = "cards.yukon.yukon:play"
 
 [build-system]
 build-backend = "flit_core.buildapi"
