@@ -5,6 +5,9 @@ A text/JSON friendly environment for playing cribbage against the computer, e.g.
     obs = env.reset()
     result = env.step({"type": "discard", "cards": ["5H", "KS"]})
 
+For reproducible games across implementations pass `decks` (one 52 card order per deal, as card ids)
+and `first_dealer` instead of relying on a seed; see `CribbageEnv`.
+
 Everything in observations and results is plain JSON-serializable data. The agent is always "you";
 the computer is "opponent". Opponent turns, the show, and dealing the next round all happen
 automatically, so after every call it is the agent's move or the game is over.
@@ -67,9 +70,40 @@ def parse_action(data: Any) -> Action:
 class CribbageEnv:
     """Play cribbage as `"you"` against a computer opponent."""
 
-    def __init__(self, seed: Optional[int] = None, opponent: str = "greedy"):
+    def __init__(
+        self,
+        seed: Optional[int] = None,
+        opponent: str = "greedy",
+        decks: Optional[List[List[str]]] = None,
+        first_dealer: str = "you",
+    ):
+        """
+        `seed` makes shuffling, the cut for first deal and the "random" opponent reproducible.
+
+        `decks` instead fixes the cards: a list of full 52 card orders as card ids, one per deal
+        (deal N uses decks[N] exactly, unshuffled; the game must finish within len(decks) deals or
+        dealing raises IllegalAction("decks_exhausted")). In each deal the cards are taken from the
+        top: player 1 ("you") gets indexes 0-5, the opponent 6-11, and index 12 is the starter. With
+        `decks` the first dealer is `first_dealer` ("you" or "opponent"; the dealer then alternates)
+        rather than a random cut. The "greedy" opponent uses no randomness, so decks alone fully
+        determine the game; the "random" opponent still depends on `seed`. `reset()` replays the
+        same decks. `first_dealer` is ignored without `decks`.
+
+        If the game is still undecided when the decks run out, the step that finishes the last
+        round succeeds with a final {"type": "decks_exhausted"} event, and the game is then over
+        with no winner (`done` is true, phase "complete", `winner` None, no legal actions).
+        """
         if opponent not in OPPONENTS:
             raise ValueError(f"opponent must be one of {OPPONENTS}")
+        if first_dealer not in ("you", "opponent"):
+            raise ValueError('first_dealer must be "you" or "opponent"')
+        if decks is not None and len(decks) == 0:
+            raise ValueError("decks must contain at least one deck")
+        self.__decks = (
+            [[card_from_id(c) for c in order] for order in decks] if decks is not None else None
+        )
+        self.__exhausted = False
+        self.__first_dealer = AGENT if first_dealer == "you" else OPPONENT
         self.__opponent_kind = opponent
         self.__seed = seed
         self.__game: Cribbage
@@ -86,9 +120,13 @@ class CribbageEnv:
             self.__seed = seed
         rng = random.Random(self.__seed)
         self.__opponent_rng = random.Random(rng.random())
-        self.__game = Cribbage(rng=rng)
+        if self.__decks is None:
+            self.__game = Cribbage(rng=rng)
+        else:
+            self.__game = Cribbage(rng=rng, decks=self.__decks, first_dealer=self.__first_dealer)
         self.__ai = CribbageAI(self.__game, OPPONENT)
         self.__log = []
+        self.__exhausted = False
         events = self.__game.deal()
         events += self.__advance()
         return self.__result(True, events)
@@ -99,6 +137,8 @@ class CribbageEnv:
         An illegal or malformed action returns ok=False with an error {"code", "message"} and
         changes nothing, so the agent can simply try again.
         """
+        if self.__exhausted:
+            return self.__result(False, [], {"code": "game_over", "message": "The game is over."})
         try:
             parsed = parse_action(action)
             events = self.__game.apply(AGENT, parsed)
@@ -111,6 +151,8 @@ class CribbageEnv:
         """The current observation."""
         game = self.__game
         state = game.state()
+        if self.__exhausted:
+            state = PlayState.COMPLETE
         phase = {
             PlayState.DISCARD: "discard",
             PlayState.PEGGING: "pegging",
@@ -146,7 +188,7 @@ class CribbageEnv:
 
     @property
     def done(self) -> bool:
-        return self.__game.state() == PlayState.COMPLETE
+        return self.__game.state() == PlayState.COMPLETE or self.__exhausted
 
     # ---- internals --------------------------------------------------------------------
 
@@ -156,7 +198,14 @@ class CribbageEnv:
         game = self.__game
         while game.state() != PlayState.COMPLETE:
             if game.state() == PlayState.SHOW:
-                events += game.deal()
+                try:
+                    events += game.deal()
+                except IllegalAction as e:
+                    if e.code != "decks_exhausted":
+                        raise
+                    self.__exhausted = True
+                    events.append({"type": "decks_exhausted"})
+                    break
             elif OPPONENT in game.to_act():
                 events += self.__opponent_act()
             else:
@@ -183,6 +232,8 @@ class CribbageEnv:
     @staticmethod
     def __prompt(obs: dict) -> str:
         if obs["phase"] == "complete":
+            if obs["winner"] is None:
+                return f"Game over: the decks ran out at {obs['you_score']} to {obs['opponent_score']}."
             return f"Game over: {obs['winner']} won, {obs['you_score']} to {obs['opponent_score']}."
         if obs["phase"] == "discard":
             return (

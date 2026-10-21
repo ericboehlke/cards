@@ -14,6 +14,9 @@ result = env.reset()                           # {"ok", "error", "events", "obse
 result = env.step({"type": "discard", "cards": ["5H", "KS"]})
 ```
 
+For reproducible games pass `decks=[[52 card ids], ...]` (one order per deal) and `first_dealer="you"|"opponent"`
+instead of `seed`; see `testdata/golden/README.md`.
+
 ## JSON lines
 
 `cribbage api --seed 1 --opponent greedy` writes the opening result, then reads one JSON object per

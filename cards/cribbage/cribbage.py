@@ -67,12 +67,26 @@ class Cribbage:
         first_dealer=None,
         shuffle=True,
         starting_points: Optional[Dict[Player, int]] = None,
+        decks: Optional[List[List[Card]]] = None,
     ):
         """
         `rng` makes shuffling and the cut for first deal reproducible. `shuffle=False` deals the
         deck in the order given (player 1 gets the first six, player 2 the next six, the starter is
         the 13th card), which makes scripted scenarios possible, as does `starting_points`.
+
+        `decks` is a list of complete card orders, one per deal (the first deal uses `decks[0]`,
+        and so on), each used exactly as given with no shuffling. Cards are dealt as above. It
+        needs `first_dealer` (there is no cut) and dealing past the last deck raises
+        IllegalAction("decks_exhausted"). `deck` is ignored when `decks` is given and `shuffle` has no
+        effect. No randomness is used, so games are reproducible.
         """
+        if decks is not None:
+            if first_dealer is None:
+                raise ValueError("decks requires first_dealer")
+            for order in decks:
+                if len(order) != len(DECK) or set(order) != set(DECK):
+                    raise ValueError("each deck must be a permutation of all 52 cards")
+        self.__decks = [list(order) for order in decks] if decks is not None else None
         self.__deck = list(deck) if deck is not None else list(DECK)
         self.__rng = rng or random.Random()
         self.__shuffle = shuffle
@@ -143,12 +157,16 @@ class Cribbage:
         """Deal a new round; the deal passes to the other player after the first round."""
         if self.__state not in (PlayState.READY, PlayState.SHOW):
             raise IllegalAction("wrong_phase", f"Cannot deal during {self.__state.name}")
+        if self.__decks is not None and self.__deals >= len(self.__decks):
+            raise IllegalAction("decks_exhausted", f"Only {len(self.__decks)} decks were supplied.")
         if self.__dealer is None:
             self.__dealer = self.__rng.choice(list(Player))  # the cut for first deal
         elif self.__deals > 0:
             self.__dealer = other(self.__dealer)
+        if self.__decks is not None:
+            self.__deck = self.__decks[self.__deals]
         self.__deals += 1
-        if self.__shuffle:
+        if self.__shuffle and self.__decks is None:
             self.__deck = shuffled(self.__deck, self.__rng)
         self.__hands[Player.PLAYER1] = Hand(self.__deck[:6])
         self.__hands[Player.PLAYER2] = Hand(self.__deck[6:12])
@@ -403,6 +421,8 @@ def describe_event(event: dict, names: Optional[Dict[str, str]] = None) -> str:
             f"Show: {who} {event['what']} {' '.join(event['cards'])} with starter "
             f"{event['starter']} scored {event['points']}{detail}."
         )
+    if kind == "decks_exhausted":
+        return "The supplied decks ran out; the game is over with no winner."
     if kind == "game_over":
         return f"Game over: {names.get(event['winner'], event['winner'])} won."
     return str(event)
