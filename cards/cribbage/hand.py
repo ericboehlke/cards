@@ -21,8 +21,8 @@ class Hand:
         return f"Hand({self.__cards}, is_crib={self.is_crib})"
 
     def cards(self) -> List[Card]:
-        """Return a list of the cards in the hand."""
-        return self.__cards
+        """Return a copy of the list of the cards in the hand."""
+        return list(self.__cards)
 
     def display(self, show=True) -> str:
         """Return a string representation of the hand for display."""

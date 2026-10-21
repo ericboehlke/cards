@@ -21,6 +21,17 @@ Run the tests with the following command from the test directory
 python3 -m unittest
 ```
 
+Fuzz whole cribbage games against an independent scoring oracle (from the test directory):
+
+```
+python3 fuzz_cribbage.py --games 2000 --random-only
+```
+
+## Cribbage API
+
+`cribbage api` speaks JSON lines so an LLM can play against the computer; see
+[docs/cribbage_api.md](docs/cribbage_api.md).
+
 ## Features to Add
 
 ### Cribbage

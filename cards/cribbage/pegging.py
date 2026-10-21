@@ -35,71 +35,94 @@ def parse_pegging(response: str, hand: Hand):
 PlayedCard = namedtuple("PlayedCard", ["player", "card"])
 PeggingScore = namedtuple("PeggingScore", ["fifteen", "thirtyone", "go", "pair", "run", "total"])
 
+NO_SCORE = PeggingScore(0, 0, 0, 0, 0, 0)
+MAX_COUNT = 31
+
+
+def other(player: Player) -> Player:
+    """Return the other player."""
+    return Player.PLAYER1 if player == Player.PLAYER2 else Player.PLAYER2
+
 
 class CardsInPlay:
     """
     The cards in play during pegging.
+
+    Tracks the current sequence (reset at 31 or when both players are stuck) separately from every
+    card played this round, which are needed to return the hands for the show.
     """
 
     def __init__(self) -> None:
         self.__played_cards: List[PlayedCard] = []
-        self.__current_count: int = 0
+        self.__sequence: List[PlayedCard] = []
         self.__points: Dict[Player, int] = {Player.PLAYER1: 0, Player.PLAYER2: 0}
-        self.__current_run: List[PlayedCard] = []
         self.__current_gos: Dict[Player, bool] = {Player.PLAYER1: False, Player.PLAYER2: False}
 
     def count(self) -> int:
         """Return the current play count."""
-        return self.__current_count
+        return sum(card_value(played.card) for played in self.__sequence)
+
+    def sequence(self) -> List[PlayedCard]:
+        """Return the cards played since the count was last reset."""
+        return list(self.__sequence)
+
+    def played_cards(self) -> List[PlayedCard]:
+        """Return every card played this round, including before the last count reset."""
+        return list(self.__played_cards)
+
+    def last_player(self) -> Optional[Player]:
+        """Return the player who played the most recent card this round, if any."""
+        return self.__played_cards[-1].player if self.__played_cards else None
 
     def points(self, player: Player) -> int:
         """Return the current points for a player in this round of play."""
         return self.__points[player]
 
+    def can_play(self, card: Card) -> bool:
+        """Return True if the card can be played without exceeding 31."""
+        return self.count() + card_value(card) <= MAX_COUNT
+
+    def has_said_go(self, player: Player) -> bool:
+        """Return True if the player has already said go in the current sequence."""
+        return self.__current_gos[player]
+
+    def end_sequence(self) -> None:
+        """Reset the count and the go flags to begin a new sequence."""
+        self.__sequence = []
+        self.__current_gos = {Player.PLAYER1: False, Player.PLAYER2: False}
+
     def play(self, player: Player, card) -> Dict[Player, PeggingScore]:
         """Play a card and return the points scored by each player."""
-        valid_play, extend_run, score = self.score_play(PlayedCard(player, card))
+        valid_play, score = self.score_play(PlayedCard(player, card))
         if not valid_play:
             raise ValueError("Cannot play card that would exceed 31")
         played_card = PlayedCard(player, card)
         self.__played_cards.append(played_card)
-        if extend_run:
-            self.__current_run.append(played_card)
-        else:
-            self.__current_run = self.__played_cards[-2:]
-        self.__current_count += card_value(card)
+        self.__sequence.append(played_card)
         self.__points[player] += score.total
-        opponent = Player.PLAYER1 if player == Player.PLAYER2 else Player.PLAYER2
-        if self.__current_count == 31:
-            self.__current_gos[player] = False
-            self.__current_gos[opponent] = False
-            self.__current_count = 0
-            self.__current_run = []
-        return {player: score, opponent: PeggingScore(0, 0, 0, 0, 0, 0)}
+        if self.count() == MAX_COUNT:
+            self.end_sequence()
+        return {player: score, other(player): NO_SCORE}
 
     def go(self, player: Player) -> Dict[Player, PeggingScore]:
-        """Say go and return the points scored by each player."""
-        opponent = Player.PLAYER1 if player == Player.PLAYER2 else Player.PLAYER2
+        """
+        Say go and return the points scored by each player.
+
+        The first go scores nothing. When the other player has also said go (or cannot play), the
+        sequence ends and the player who played the last card scores one point.
+        """
+        opponent = other(player)
+        result = {player: NO_SCORE, opponent: NO_SCORE}
+        if not self.__sequence:
+            return result
         if self.__current_gos[opponent]:
-            self.__current_gos[player] = False
-            self.__current_gos[opponent] = False
-            self.__current_count = 0
-            self.__current_run = []
-            return {
-                player: PeggingScore(0, 0, 0, 0, 0, 0),
-                opponent: PeggingScore(0, 0, 0, 0, 0, 0),
-            }
-        if not self.__current_gos[player]:
+            last = self.__sequence[-1].player
+            result[last] = PeggingScore(0, 0, 1, 0, 0, 1)
+            self.__points[last] += 1
+            self.end_sequence()
+        else:
             self.__current_gos[player] = True
-            self.__points[opponent] += 1
-            return {
-                player: PeggingScore(0, 0, 0, 0, 0, 0),
-                opponent: PeggingScore(fifteen=0, thirtyone=0, go=1, pair=0, run=0, total=1),
-            }
-        return {
-            player: PeggingScore(0, 0, 0, 0, 0, 0),
-            opponent: PeggingScore(0, 0, 0, 0, 0, 0),
-        }
+        return result
 
     def return_cards(self, player: Player) -> List[Card]:
         """Return the cards played by a player."""
@@ -107,73 +130,47 @@ class CardsInPlay:
             played_card.card for played_card in self.__played_cards if played_card.player == player
         ]
 
-    def score_play(self, played_card: PlayedCard) -> Tuple[bool, bool, PeggingScore]:
+    def score_play(self, played_card: PlayedCard) -> Tuple[bool, PeggingScore]:
         """
         Calculates the score for a play
 
-        Returns a tuple of (valid_play, extend_run, score)
+        Returns a tuple of (valid_play, score)
         """
-        points = {"fifteen": 0, "thirtyone": 0, "go": 0, "pair": 0, "run": 0}
-        extend_run = False
-        new_count = self.__current_count + card_value(played_card.card)
-        if new_count > 31:
-            return False, False, PeggingScore(0, 0, 0, 0, 0, 0)
-        # Fifteen
-        if new_count == 15:
-            points["fifteen"] += 2
-        # Thirty-one
-        if new_count == 31:
-            points["thirtyone"] += 2
-        # Pair
-        if (
-            len(self.__played_cards) > 0
-            and self.__played_cards[-1].card.number() == played_card.card.number()
-        ):
-            if (
-                len(self.__played_cards) > 1
-                and self.__played_cards[-2].card.number() == played_card.card.number()
-            ):
-                if (
-                    len(self.__played_cards) > 2
-                    and self.__played_cards[-3].card.number() == played_card.card.number()
-                ):
-                    points["pair"] += 6
-                points["pair"] += 4
-            points["pair"] += 2
-        # Run
-        if len(self.__current_run) == 0:
-            extend_run = False
-        else:
-            proposed_run = self.__current_run + [played_card]
-            proposed_run = sorted(proposed_run, key=lambda pc: pc.card.number())
-            gaps = [
-                proposed_run[i].card.number() - proposed_run[i - 1].card.number()
-                for i in range(1, len(proposed_run))
-            ]
-            if all((gap == 1 for gap in gaps)):
-                if len(proposed_run) >= 3:
-                    points["run"] += len(proposed_run)
-                extend_run = True
-            else:
-                extend_run = False
+        new_count = self.count() + card_value(played_card.card)
+        if new_count > MAX_COUNT:
+            return False, NO_SCORE
+        sequence = [pc.card for pc in self.__sequence] + [played_card.card]
+        fifteen = 2 if new_count == 15 else 0
+        thirtyone = 2 if new_count == MAX_COUNT else 0
+        # Pairs: the trailing cards of the same rank
+        same = 1
+        while same < len(sequence) and sequence[-1 - same].number() == played_card.card.number():
+            same += 1
+        pair = {1: 0, 2: 2, 3: 6, 4: 12}[same]
+        # Runs: the longest trailing group of three or more cards that are consecutive in any order
+        run = 0
+        for length in range(len(sequence), 2, -1):
+            numbers = sorted(c.number() for c in sequence[-length:])
+            if numbers == list(range(numbers[0], numbers[0] + length)):
+                run = length
+                break
         return (
             True,
-            extend_run,
             PeggingScore(
-                fifteen=points["fifteen"],
-                thirtyone=points["thirtyone"],
-                go=points["go"],
-                pair=points["pair"],
-                run=points["run"],
-                total=sum(points.values()),
+                fifteen=fifteen,
+                thirtyone=thirtyone,
+                go=0,
+                pair=pair,
+                run=run,
+                total=fifteen + thirtyone + pair + run,
             ),
         )
 
     def display(self):
-        """Return a string representation of the cards in play."""
+        """Return a string representation of the current sequence of cards in play."""
         opponent_string = ""
         player_string = ""
-        for played_card in self.__played_cards:
+        for played_card in self.__sequence:
             if played_card.player == Player.PLAYER1:
                 player_string += str(played_card.card) + " "
                 opponent_string += "    "
@@ -189,39 +186,26 @@ def ai_play(hand, cards_in_play) -> Tuple[Dict[Player, PeggingScore], Union[Card
 
     Returns a tuple of (point dictionary, card)
     """
-    return (
-        (
-            cards_in_play.play(
-                Player.PLAYER2,
-                hand.discard(played_card),
-            ),
-            played_card,
-        )
-        if (played_card := play_ai(hand, cards_in_play)) is None
-        else (cards_in_play.go(Player.PLAYER2), None)
-    )
+    played_card = play_ai(hand, cards_in_play)
+    if played_card is None:
+        return cards_in_play.go(Player.PLAYER2), None
+    return cards_in_play.play(Player.PLAYER2, hand.discard(played_card)), played_card
 
 
 def play_ai(hand, cards_in_play) -> Optional[Card]:
     """
     A greedy AI that determines the card that gives the most points during play
 
-    Returns a tuple of (point dictionary, card)
+    Returns the card to play, or None if no card can be played.
     """
-    return (
-        (max(valid_cards, key=lambda t: t[0][2].total)[1])
-        if len(
-            (
-                valid_cards := [
-                    (valid_play, card)
-                    for card in hand.cards()
-                    if (valid_play := cards_in_play.score_play(PlayedCard(Player.PLAYER2, card)))[0]
-                ]
-            )
-        )
-        > 0
-        else None
-    )
+    valid_cards = [
+        (cards_in_play.score_play(PlayedCard(Player.PLAYER2, card))[1].total, card)
+        for card in hand.cards()
+        if cards_in_play.can_play(card)
+    ]
+    if not valid_cards:
+        return None
+    return max(valid_cards, key=lambda scored: scored[0])[1]
 
 
 def print_points(points):

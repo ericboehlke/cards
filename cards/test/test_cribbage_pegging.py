@@ -163,9 +163,42 @@ class TestPegging(unittest.TestCase):
         self.assertZeroScore(score)
         score = cards_in_play.play(Player.PLAYER2, FIVE_OF_SPADES)
         self.assertZeroScore(score)
-        score = cards_in_play.play(Player.PLAYER1, TWO_OF_SPADES)
+        score = cards_in_play.play(Player.PLAYER1, NINE_OF_SPADES)
         self.assertZeroScore(score)
         score = cards_in_play.play(Player.PLAYER2, FOUR_OF_DIAMONDS)
+        self.assertZeroScore(score)
+
+    def test_run_in_any_order_of_four(self):
+        """3, 5, 2, 4 played in that order is a run of four."""
+        cards_in_play = CardsInPlay()
+        cards_in_play.play(Player.PLAYER1, THREE_OF_HEARTS)
+        cards_in_play.play(Player.PLAYER2, FIVE_OF_SPADES)
+        score = cards_in_play.play(Player.PLAYER1, TWO_OF_SPADES)
+        self.assertEqual(score[Player.PLAYER1].run, 0)
+        score = cards_in_play.play(Player.PLAYER2, FOUR_OF_DIAMONDS)
+        self.assertEqual(score[Player.PLAYER2].run, 4)
+
+    def test_long_run_after_broken_runs(self):
+        """A run longer than the previous partial run is found (9 A 5 6 2 3 4 ends in a run of 6)."""
+        cards_in_play = CardsInPlay()
+        for i, card in enumerate([NINE_OF_SPADES, ACE_OF_DIAMONDS, FIVE_OF_DIAMONDS, SIX_OF_CLUBS]):
+            cards_in_play.play(Player.PLAYER1 if i % 2 == 0 else Player.PLAYER2, card)
+        cards_in_play.play(Player.PLAYER1, TWO_OF_CLUBS)
+        cards_in_play.play(Player.PLAYER2, THREE_OF_HEARTS)
+        score = cards_in_play.play(Player.PLAYER1, FOUR_OF_CLUBS)
+        self.assertEqual(score[Player.PLAYER1].run, 6)
+
+    def test_no_pair_or_run_across_count_reset(self):
+        """Cards from before a reset to 0 never form a pair or run with later cards."""
+        cards_in_play = CardsInPlay()
+        cards_in_play.play(Player.PLAYER1, KING_OF_HEARTS)
+        cards_in_play.play(Player.PLAYER2, TEN_OF_DIAMONDS)
+        cards_in_play.play(Player.PLAYER1, FIVE_OF_SPADES)
+        cards_in_play.play(Player.PLAYER2, SIX_OF_SPADES)  # 31
+        self.assertEqual(cards_in_play.count(), 0)
+        score = cards_in_play.play(Player.PLAYER1, SIX_OF_CLUBS)
+        self.assertZeroScore(score)
+        score = cards_in_play.play(Player.PLAYER2, SEVEN_OF_CLUBS)
         self.assertZeroScore(score)
 
     def test_triple_king_thirtyone(self):
@@ -214,15 +247,16 @@ class TestPegging(unittest.TestCase):
         score = cards_in_play.play(Player.PLAYER1, KING_OF_SPADES)
         self.assertZeroScore(score)
         score = cards_in_play.go(Player.PLAYER2)
+        self.assertZeroScore(score)  # the first go scores nothing
+        score = cards_in_play.go(Player.PLAYER1)
         self.assertEqual(
             score,
             {  #                             15 31 go p  r  t
                 Player.PLAYER1: PeggingScore(0, 0, 1, 0, 0, 1),
                 Player.PLAYER2: PeggingScore(0, 0, 0, 0, 0, 0),
             },
-        )
-        score = cards_in_play.go(Player.PLAYER1)
-        self.assertZeroScore(score)
+        )  # last card point to the last player to play
+        self.assertEqual(cards_in_play.count(), 0)
 
     def test_thirtyone_run(self):
         """Test a 31 that is also a run."""

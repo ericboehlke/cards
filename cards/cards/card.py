@@ -148,8 +148,28 @@ def rest_of_deck(cards):
     return [c for c in DECK if c not in cards]
 
 
-def shuffled(cards):
-    """Shuffle a list of cards."""
+def shuffled(cards, rng=None):
+    """Shuffle a list of cards, optionally with a seeded random.Random for reproducibility."""
     shuffled_cards = copy.deepcopy(cards)
-    random.shuffle(shuffled_cards)
+    (rng or random).shuffle(shuffled_cards)
     return list(shuffled_cards)
+
+
+_RANK_CHARS = "A23456789TJQK"
+_SUIT_CHARS = {"HEARTS": "H", "DIAMONDS": "D", "CLUBS": "C", "SPADES": "S"}
+_CHAR_SUITS = {char: name for name, char in _SUIT_CHARS.items()}
+
+
+def card_id(card):
+    """Return the stable plain-text id of a card, e.g. "5H", "TS", "AC"."""
+    return _RANK_CHARS[card.number() - 1] + _SUIT_CHARS[card.suit().name]
+
+
+def card_from_id(card_str):
+    """Return the card for an id like "5H" ("10H" is also accepted). Raises ValueError if invalid."""
+    text = str(card_str).strip().upper()
+    if text.startswith("10"):
+        text = "T" + text[2:]
+    if len(text) != 2 or text[0] not in _RANK_CHARS or text[1] not in _CHAR_SUITS:
+        raise ValueError(f"Not a card id: {card_str!r} (expected like '5H', 'TS', 'AC')")
+    return Card(Suit[_CHAR_SUITS[text[1]]], _RANK_CHARS.index(text[0]) + 1)
