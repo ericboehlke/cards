@@ -39,13 +39,13 @@ Branch: `develop`.
 - [x] Independent review (fixtures cross-checked against `oracle_cribbage.py`); findings fixed
 
 ### Step 2: Go engine, no UI
-- [ ] Go module layout (`go.mod`, `internal/cards`, `internal/cribbage`)
-- [ ] Cards, hands, `card_id` parsing
-- [ ] Scoring passes `scoring.json`
-- [ ] Pegging passes `pegging.json`
-- [ ] Discard table + greedy AI pass `ai.json` (float64 summation order, tie-breaks per README)
-- [ ] Full game engine passes `games.json` (structured fields; `text`/`message` non-normative)
-- [ ] CI / `go test ./...` wired up
+- [x] Go module layout (`go.mod`, `internal/cards`, `internal/cribbage`)
+- [x] Cards, hands, `card_id` parsing
+- [x] Scoring passes `scoring.json`
+- [x] Pegging passes `pegging.json`
+- [x] Discard table + greedy AI pass `ai.json` (float64 summation order, tie-breaks per README)
+- [x] Full game engine passes `games.json` (structured fields; `text`/`message` non-normative)
+- [x] CI / `go test ./...` wired up (`.github/workflows/go.yml`)
 
 ### Step 3: port fuzz and oracle checks
 - [ ] Port invariants from `fuzz_cribbage.py` to Go
