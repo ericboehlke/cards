@@ -48,8 +48,25 @@ Branch: `develop`.
 - [x] CI / `go test ./...` wired up (`.github/workflows/go.yml`)
 
 ### Step 3: port fuzz and oracle checks
-- [ ] Port invariants from `fuzz_cribbage.py` to Go
-- [ ] One-off differential run: Python oracle vs Go engine on shared injected decks and actions
+- [x] Port invariants from `fuzz_cribbage.py` to Go (`internal/cribbage/fuzz_test.go`, `oracle_test.go`; native target `FuzzEnv`)
+- [x] One-off differential run: Python oracle vs Go engine on shared injected decks and actions (`scripts/diff_python_go.py` + `cmd/diffdriver`)
+
+Step 3 notes:
+- `oracle_test.go` is a test-only port of `oracle_cribbage.py`; it is compared with `ScoreHand`/`ScoreHandBreakdown`
+  and `CardsInPlay.Play` on random inputs. `fuzz_test.go` plays seeded games through `Game` (random and greedy
+  players, illegal probes that must leave state unchanged) with the same rule checker as the Python fuzzer, and
+  fuzzes `Env` with junk actions. Run the native fuzzer with `go test -run='^$' -fuzz=FuzzEnv ./internal/cribbage`.
+- Differential run: `uv run python scripts/diff_python_go.py --seed N --games M [--junk P]` builds `cmd/diffdriver`,
+  plays the Python `CribbageEnv` on seeded shuffled decks (some games with only 1-3 decks to hit `decks_exhausted`)
+  with legal actions mixed with junk (bad types, wrong counts, odd card id spellings, cards not held, over 31), then
+  replays the same decks and actions on the Go `Env` and compares every result with `text`/`prompt`/`message`
+  stripped. Last run: 7000 games (seeds 0-3999 at 25% junk,
+  100000-102999 at 60% junk), about 372k agent actions of which about 126k were rejected, 4.8k wins, 2.2k games ended
+  by `decks_exhausted`: 0 differences in events, observations, error codes, `done` or scores. Deliberately breaking a
+  Go scoring value or error code makes the run fail, so the comparison is live. Go-side fuzz found no rule violations
+  either. (`not_your_turn` cannot occur through the Env API, so only `Game` fuzz covers it.)
+  Limits: greedy opponent only; junk is limited to JSON shapes the Go `ActionInput` can represent (no non-string
+  card values).
 
 ### Step 4: JSON protocol in Go
 - [ ] `cribbage serve --json` speaking the `api_cli.py` stdin/stdout protocol
