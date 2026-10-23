@@ -29,6 +29,42 @@ line and answers each with one JSON line (nothing else is printed to stdout):
 {"command": "reset", "seed": 3}
 ```
 
+### Go binary
+
+The Go port speaks the same protocol: `cribbage serve --json [--seed N] [--opponent greedy]`
+(`go run ./cmd/cribbage serve --json`). Differences from `cribbage api`:
+
+* Only the `greedy` opponent exists; `--opponent random` exits with status 2 and a message on stderr.
+* `--seed` reproduces games within the Go binary, but the shuffles differ from Python's for the same
+  seed (different RNG). Without `--seed` each process uses a random seed. As in Python, `reset`
+  without a seed replays the seeded game.
+* The first dealer is random for shuffled games, as in Python.
+* Error `message` texts are worded differently; only `code`s are normative. Event `text` and
+  `prompt` are identical to Python's. Output is compact JSON with sorted event keys and raw UTF-8.
+* Deliberate leniency differences (the Go side is stricter or more defined):
+  * `seed` must be an integer; Python accepts other types or crashes.
+  * `NaN` / `Infinity` / `-Infinity` tokens are invalid JSON and give `bad_json`.
+  * Input that is not valid UTF-8 gives `bad_json` (Python crashes).
+  * Key order and whitespace differ (compact output, sorted event keys); compare parsed JSON.
+
+### Replay extension: `decks` and `first_dealer` (optional)
+
+`reset` also accepts `decks` (a non-empty list of full 52 card id orders, one per deal; deal N uses
+`decks[N]` unshuffled: indexes 0-5 are yours, 6-11 the opponent's, 12 the starter) and `first_dealer`
+(`"you"` or `"opponent"`):
+
+```
+{"command": "reset", "decks": [["AH", "2H", ...], ...], "first_dealer": "opponent"}
+```
+
+Absent means the old behaviour (shuffled, random first dealer). With `decks` the first dealer
+defaults to `"you"`; without `decks`, `first_dealer` pins the first dealer of shuffled games.
+Both persist, so a later plain `{"command": "reset"}` replays the same decks. `"decks": null` /
+`"first_dealer": null` clears them. Invalid values give `ok: false`, code `bad_request`, and change
+nothing. If the decks run out the game ends with a `decks_exhausted` event and no winner. The Go
+binary implements this; the Python `api_cli` does not take these fields on `reset` (Python replay
+uses `CribbageEnv(decks=..., first_dealer=...)`).
+
 ## Cards
 
 Rank then suit: `A 2 3 4 5 6 7 8 9 T J Q K` and `H D C S`, e.g. `5H`, `TS`, `AC` (`10S` is also accepted).

@@ -69,9 +69,9 @@ Step 3 notes:
   card values).
 
 ### Step 4: JSON protocol in Go
-- [ ] `cribbage serve --json` speaking the `api_cli.py` stdin/stdout protocol
-- [ ] Existing Python agent/fuzz tooling runs against the Go binary unchanged
-- [ ] Decide whether to expose `decks` in the protocol for replay
+- [x] `cribbage serve --json` speaking the `api_cli.py` stdin/stdout protocol
+- [x] Go binary is checked against Python over the protocol (no external Python agent/fuzz tooling exists in the repo; `scripts/check_protocol.py` and `cards/test/test_go_protocol.py` cover parity)
+- [x] Decide whether to expose `decks` in the protocol for replay (yes: optional `decks`/`first_dealer` on `reset`)
 
 ### Step 5: Bubble Tea UI
 - [ ] Thin model (game, cursor, event log) calling `apply`
@@ -100,3 +100,9 @@ Step 3 notes:
 - Fixtures use only the deterministic `greedy` opponent; the `random` opponent is not covered.
 - `uv.lock` is untracked and was not part of step 1. Regenerate with `uv lock` if missing.
 - Run tests with `uv run --with pytest python -m pytest -q`.
+- Step 4: `cmd/cribbage` + `internal/protocol` implement `serve --json [--seed N]`; only the greedy
+  opponent (`--opponent random` is rejected with exit 2). The Go binary shuffles its own decks.
+  The repo has no Python agent script that launches the protocol; the Python fuzzer drives the
+  engine in-process. Protocol parity is verified by `scripts/check_protocol.py` (and
+  `cards/test/test_go_protocol.py`), which launch any server command (`CRIBBAGE_SERVE_CMD`) and
+  compare every reply with `CribbageEnv`. Protocol docs: `docs/cribbage_api.md`.

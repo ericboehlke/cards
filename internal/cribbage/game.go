@@ -503,7 +503,7 @@ func ParseAction(in ActionInput) (Action, error) {
 	}
 	h, err := cards.ParseHand(ids)
 	if err != nil {
-		return Action{}, illegal("bad_action", "Malformed action %+v: %v", in, err)
+		return Action{}, illegal("bad_action", "Malformed action: %v", err)
 	}
 	return Action{in.Type, h}, nil
 }

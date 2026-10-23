@@ -3,8 +3,8 @@ Differential test: the Python CribbageEnv against the Go Env (cmd/diffdriver).
 
 For each game this script picks shuffled decks (seeded), plays the Python env with a mix of legal
 and junk actions, and records every action and result. The same decks and actions are replayed on
-the Go env and every result is compared field by field, with the human oriented `text`, `prompt`
-and `message` fields stripped (error `code`s are compared).
+the Go env and every result is compared field by field, with only the human oriented error
+`message` field stripped (error `code`s are compared).
 
     uv run python scripts/diff_python_go.py --seed 0 --games 2000
     uv run python scripts/diff_python_go.py --seed 0 --games 200 --junk 0.4 --keep out.json
@@ -85,7 +85,7 @@ def junk_action(rng, obs):
 
 def strip(v):
     if isinstance(v, dict):
-        return {k: strip(x) for k, x in v.items() if k not in ("text", "prompt", "message")}
+        return {k: strip(x) for k, x in v.items() if k not in ("message",)}
     if isinstance(v, list):
         return [strip(x) for x in v]
     return v
