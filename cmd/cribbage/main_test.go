@@ -18,6 +18,8 @@ func TestRunFlags(t *testing.T) {
 		{[]string{"serve", "--json", "extra"}, 2},
 		{[]string{"serve", "--json", "--seed", "5", "x", "y"}, 2},
 		{[]string{"serve", "--json", "--seed", "5", "--opponent", "greedy"}, 0},
+		{[]string{"play", "--bogus"}, 2},
+		{[]string{"play", "extra"}, 2},
 	}
 	for _, c := range cases {
 		var out, errb bytes.Buffer

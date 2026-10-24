@@ -14,7 +14,7 @@ served as a TUI over SSH (`ssh host`).
   LLM harness unless Go speaks the same JSON protocol.
 - **Rule:** keep functionality. The Python implementation plus the golden fixtures are the spec until
   the Go version passes them all.
-- Not yet verified: Charm v2 import paths and APIs (written from memory; check before use).
+- Charm v2 import paths and APIs verified against the module proxy on 2026-10-26 (see Step 5 notes).
 
 ## Scope (Python, about 4,400 lines)
 
@@ -74,10 +74,46 @@ Step 3 notes:
 - [x] Decide whether to expose `decks` in the protocol for replay (yes: optional `decks`/`first_dealer` on `reset`)
 
 ### Step 5: Bubble Tea UI
-- [ ] Thin model (game, cursor, event log) calling `apply`
-- [ ] Lip Gloss layout: hands, pegging area, score panel, event log, key help
-- [ ] Suit glyph fallback (`S/H/D/C`) for width/terminal issues
-- [ ] `teatest` tests
+- [x] Thin model (game, cursor, event log) calling `Env.Step` (`internal/tui`)
+- [x] Lip Gloss layout: hands, pegging area, score panel, event log, key help
+- [x] Suit glyph fallback (`S/H/D/C`) for width/terminal issues
+- [x] `teatest` tests
+
+Step 5 notes:
+- Verified libraries (proxy.golang.org, `go list -m -versions`): the stable majors are v2 and use the
+  vanity domain `charm.land`: `charm.land/bubbletea/v2 v2.1.0`, `charm.land/lipgloss/v2 v2.0.6`,
+  `charm.land/bubbles/v2 v2.2.1` (viewport, help, key). The old `github.com/charmbracelet/{bubbletea,lipgloss,bubbles}`
+  paths are v1 (bubbletea v1.3.10, lipgloss v1.1.0, bubbles v1.0.0) and are not used. teatest has no tagged release:
+  `github.com/charmbracelet/x/exp/teatest/v2 v2.0.0-20261025003702-835ad0048169` (a pseudo-version; it imports
+  `charm.land/bubbletea/v2`). `charm.land/x/exp/teatest/v2` does NOT resolve (module declares the github path), and the
+  non-`/v2` teatest is for bubbletea v1. Pin this pseudo-version; it may change.
+- v2 API differences from v1 (all confirmed in source): `Model.View()` returns `tea.View` (`tea.NewView(s)`, set
+  `v.AltScreen = true` there, no `tea.WithAltScreen` option); keys arrive as `tea.KeyPressMsg` (`msg.String()`: space is
+  `"space"`, `"pgup"`, `"pgdown"`, `"ctrl+c"`); lipgloss colors are `color.Color` (`lipgloss.Color("#hex")`),
+  `Style.Width` includes border and padding, and Render always emits ANSI (the program downsamples), so tests strip it with
+  `x/ansi`; `viewport.New()` takes options and uses `SetWidth/SetHeight`; `help.Model.SetWidth`.
+  The viewport's default keymap binds space/j/k/u/d, so key messages are NOT forwarded to it (only pgup/pgdn/home/end are
+  mapped by the model).
+- Bubble Tea v2 renders diffs, so `teatest.WaitFor` on the output stream only sees the first full frame and later changed
+  cells; tests wait for text that arrives in a whole frame and assert the rest on `FinalModel` / `Model.View()`.
+- UI: `cribbage play [--seed N] [--ascii]`. Keys: arrows/hl move, 1-6 jump, space selects discards (up to 2), enter
+  confirms the discard or, while pegging, always plays the card under the cursor (space does nothing in pegging, so there
+  is no hidden mark), `?` full help, pgup/pgdn/home/end scroll the log, `n` new game once over, `q`/ctrl+c quit.
+  Go/last card/show/deal happen inside `Env.Step`, so there is no go key and the log shows the whole opponent turn at once
+  (no animation delay). Illegal moves (e.g. over 31, wrong discard count) show the engine message in the status line and
+  change nothing. Cards the engine does not list as legal are dimmed AND marked `x` under the card (not colour-only).
+  Minimum size 64x24; smaller shows a "Terminal too small" message clamped to the terminal (never wider or taller, empty
+  at 0x0; keys still work); width is capped at 110. The one-line help footer is shortened to fit at 64 columns (full help
+  with `?` fits too); tests check every width 64-120 and heights 24-50, help open and closed, both modes.
+- The log box takes all spare height (it grows with the terminal), wraps long lines, and always scrolls to the newest line
+  after every step (tested at 64x24 and 100x50), so the latest opponent turn is visible unless you scroll up.
+- ASCII mode: `--ascii`, `CARDS_ASCII=1` (`=0` forces unicode), `TERM=dumb`, or a locale (LC_ALL, LC_CTYPE, LANG, first set)
+  that is not UTF-8 (unset counts as not UTF-8). It switches to H/D/C/S, `+-|` borders, `#-` bars, `arrows`/`left`/`right`
+  key names and ` | ` help separators. A test drives 55 seeded games and asserts every rune of the whole View (ANSI
+  stripped) is below 0x80 in all phases, help open and closed, at several sizes including too-small ones.
+- `n` starts a fresh game from the same random stream (with `--seed`, the whole session is reproducible); the engine's own
+  `Reset` would replay the same decks, so it is not used. Shuffling mirrors `internal/protocol` (100 decks, random first dealer).
+- Limits: the opponent is greedy only; no mouse; the crib contents are only visible in the log's show lines; no animation.
 
 ### Step 6: SSH via Wish
 - [ ] Host key, public-key identity middleware, per-session `tea.Program`

@@ -1,5 +1,5 @@
-// Command cribbage is the Go cribbage program. Currently it only provides `serve --json`, the
-// JSON-lines protocol of docs/cribbage_api.md.
+// Command cribbage is the Go cribbage program: `play` is the terminal UI against the greedy
+// opponent and `serve --json` is the JSON-lines protocol of docs/cribbage_api.md.
 package main
 
 import (
@@ -14,8 +14,11 @@ import (
 func main() { os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr)) }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
+	if len(args) > 0 && args[0] == "play" {
+		return runPlay(args[1:], stdin, stdout, stderr)
+	}
 	if len(args) == 0 || args[0] != "serve" {
-		fmt.Fprintln(stderr, "usage: cribbage serve --json [--seed N] [--opponent greedy]")
+		fmt.Fprintln(stderr, "usage: cribbage play [--seed N] [--ascii]\n       cribbage serve --json [--seed N] [--opponent greedy]")
 		return 2
 	}
 	fs := flag.NewFlagSet("serve", flag.ContinueOnError)
