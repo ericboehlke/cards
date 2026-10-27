@@ -126,7 +126,8 @@ Step 5 notes:
 
 ### Cutover
 - [ ] Go passes golden fixtures and old fuzz for a while
-- [ ] Move Python to `legacy/` or tag it, then remove it
+- [x] Python (including the differential/protocol scripts) removed; see git history before that commit
+- Note: after the cutover `scripts/`, `cmd/diffdriver` and `cards/` no longer exist; references above are historical
 
 ## Notes / decisions
 

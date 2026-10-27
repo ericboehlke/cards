@@ -1,9 +1,8 @@
 # Golden fixtures for cribbage
 
-Language-neutral fixtures that pin down the behaviour of the Python implementation
-(`cards/cribbage`). A port should load each file, replay the inputs and assert the outputs match
-exactly. Regenerate with `python -m cards.test.gen_golden --out testdata/golden`;
-`cards/test/test_golden.py` fails if the committed files drift from the Python code.
+Language-neutral fixtures that pin down the behaviour of the cribbage engine. They were generated from the original Python
+implementation (see git history before the Go cutover) and are now hand-maintained; the Go tests in
+`internal/cribbage` load each file, replay the inputs and assert the outputs match exactly.
 
 All files are pure JSON, written with sorted keys. Everything is deterministic.
 

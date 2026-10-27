@@ -1,41 +1,55 @@
 # Cards
 
-A collection of terminal card games.
+A terminal cribbage game written in Go, built with [Bubble Tea](https://charm.land/libs/). You
+play against a greedy computer opponent to 121 points.
 
-## Development
+## Requirements
 
-[StackOverflow Explaination](https://stackoverflow.com/questions/6323860/sibling-package-imports)
+Go (see `go.mod` for the version).
 
-Run the following command from root of this repo using a virtual environment (.venv).
+## Play
 
 ```
-python3 -m pip install -e .
-python3 -m pip freeze # to verify it is installed
+go run ./cmd/cribbage play            # terminal UI
+go run ./cmd/cribbage play --ascii    # H/D/C/S and plain borders instead of suit glyphs
+go run ./cmd/cribbage play --seed 1   # reproducible session
 ```
+
+Keys: arrows or `h`/`l` move, `1`-`6` jump to a card, space selects discards, enter confirms the
+discard or plays the card under the cursor, `?` shows help, `n` starts a new game once one is over,
+`q` quits. Minimum terminal size is 64x24.
+
+Or build a binary: `go build -o cribbage ./cmd/cribbage`.
+
+## JSON protocol
+
+`cribbage serve --json` speaks JSON lines on stdin/stdout so an LLM or script can play against the
+computer; see [docs/cribbage_api.md](docs/cribbage_api.md).
+
+## Layout
+
+* `cmd/cribbage`: the command line program (`play`, `serve`)
+* `internal/cards`: cards and card ids
+* `internal/cribbage`: scoring, pegging, greedy AI and the game state machine
+* `internal/protocol`: JSON-lines protocol
+* `internal/tui`: Bubble Tea UI
+* `testdata/golden`: golden fixtures for the engine ([format](testdata/golden/README.md))
+* `docs/go-port-plan.md`: history and notes from the port from Python
+
+The original Python implementation (including Yukon) was removed after the port; it lives in git
+history before the "Remove Python" commit.
 
 ## Tests
 
-Run the tests with the following command from the test directory
-
 ```
-python3 -m unittest
-```
-
-Fuzz whole cribbage games against an independent scoring oracle (from the test directory):
-
-```
-python3 fuzz_cribbage.py --games 2000 --random-only
+go test ./...
+go test -run='^$' -fuzz=FuzzEnv ./internal/cribbage   # native fuzzer
 ```
 
-## Cribbage API
-
-`cribbage api` speaks JSON lines so an LLM can play against the computer; see
-[docs/cribbage_api.md](docs/cribbage_api.md).
-
-## Features to Add
+## Ideas
 
 ### Cribbage
 
-[ ] Add hail mary and min points option to discard scoring
-[ ] Add pegging value to discard scoring: https://www.cribbage.org/NewSite/tips/colvert2.asp
-[ ] Training with the add star method: http://www.cribbageforum.com/YourCrib.htm
+- [ ] Add hail mary and min points option to discard scoring
+- [ ] Add pegging value to discard scoring: https://www.cribbage.org/NewSite/tips/colvert2.asp
+- [ ] Training with the add star method: http://www.cribbageforum.com/YourCrib.htm

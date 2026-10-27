@@ -4,22 +4,9 @@ You play as **you** against a computer **opponent** to 121 points. Opponent turn
 (counting hands and the crib) and dealing the next round all happen automatically, so after every
 call it is your move or the game is over.
 
-## Python
-
-```python
-from cards.cribbage.api import CribbageEnv
-
-env = CribbageEnv(seed=1, opponent="greedy")   # or "random"
-result = env.reset()                           # {"ok", "error", "events", "observation", "done"}
-result = env.step({"type": "discard", "cards": ["5H", "KS"]})
-```
-
-For reproducible games pass `decks=[[52 card ids], ...]` (one order per deal) and `first_dealer="you"|"opponent"`
-instead of `seed`; see `testdata/golden/README.md`.
-
 ## JSON lines
 
-`cribbage api --seed 1 --opponent greedy` writes the opening result, then reads one JSON object per
+`cribbage serve --json --seed 1` writes the opening result, then reads one JSON object per
 line and answers each with one JSON line (nothing else is printed to stdout):
 
 ```
@@ -29,23 +16,16 @@ line and answers each with one JSON line (nothing else is printed to stdout):
 {"command": "reset", "seed": 3}
 ```
 
-### Go binary
-
-The Go port speaks the same protocol: `cribbage serve --json [--seed N] [--opponent greedy]`
-(`go run ./cmd/cribbage serve --json`). Differences from `cribbage api`:
+### Notes
 
 * Only the `greedy` opponent exists; `--opponent random` exits with status 2 and a message on stderr.
-* `--seed` reproduces games within the Go binary, but the shuffles differ from Python's for the same
-  seed (different RNG). Without `--seed` each process uses a random seed. As in Python, `reset`
-  without a seed replays the seeded game.
-* The first dealer is random for shuffled games, as in Python.
-* Error `message` texts are worded differently; only `code`s are normative. Event `text` and
-  `prompt` are identical to Python's. Output is compact JSON with sorted event keys and raw UTF-8.
-* Deliberate leniency differences (the Go side is stricter or more defined):
-  * `seed` must be an integer; Python accepts other types or crashes.
-  * `NaN` / `Infinity` / `-Infinity` tokens are invalid JSON and give `bad_json`.
-  * Input that is not valid UTF-8 gives `bad_json` (Python crashes).
-  * Key order and whitespace differ (compact output, sorted event keys); compare parsed JSON.
+* `--seed` reproduces games; without it each process uses a random seed. `reset` without a seed
+  replays the seeded game.
+* The first dealer is random for shuffled games.
+* Only error `code`s are normative; `message` texts may change. Output is compact JSON with sorted
+  event keys and raw UTF-8.
+* `seed` must be an integer, `NaN` / `Infinity` tokens and input that is not valid UTF-8 give
+  `bad_json`.
 
 ### Replay extension: `decks` and `first_dealer` (optional)
 
@@ -61,9 +41,7 @@ Absent means the old behaviour (shuffled, random first dealer). With `decks` the
 defaults to `"you"`; without `decks`, `first_dealer` pins the first dealer of shuffled games.
 Both persist, so a later plain `{"command": "reset"}` replays the same decks. `"decks": null` /
 `"first_dealer": null` clears them. Invalid values give `ok: false`, code `bad_request`, and change
-nothing. If the decks run out the game ends with a `decks_exhausted` event and no winner. The Go
-binary implements this; the Python `api_cli` does not take these fields on `reset` (Python replay
-uses `CribbageEnv(decks=..., first_dealer=...)`).
+nothing. If the decks run out the game ends with a `decks_exhausted` event and no winner.
 
 ## Cards
 
