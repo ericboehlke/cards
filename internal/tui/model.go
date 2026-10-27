@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"charm.land/bubbles/v2/help"
 	"charm.land/bubbles/v2/viewport"
@@ -12,19 +13,35 @@ import (
 	"github.com/ericboehlke/cards/internal/cribbage"
 )
 
+// beatDelay is how long a pegging beat stays up before the next one.
+const beatDelay = 500 * time.Millisecond
+
+type beatTickMsg struct{ gen int }
+
 // Minimum terminal size for the full layout.
 const (
 	MinWidth  = 64
-	MinHeight = 24
+	MinHeight = 25
 	maxWidth  = 110
 )
 
 // Model is the Bubble Tea model.
 type Model struct {
-	newGame NewGameFunc
-	env     *cribbage.Env
-	obs     cribbage.Observation
-	done    bool
+	newGame            NewGameFunc
+	env                *cribbage.Env
+	obs                cribbage.Observation
+	done               bool
+	prevYou, prevOpp   int    // scores before the latest change: the back pegs
+	gainYou, gainOpp   int    // points scored by the latest beat
+	shownYou, shownOpp int    // scores on the board; they trail the engine while beats play out
+	shownDealer        string // dealer of the round on the board (the count happens before the next deal shows)
+
+	beats    []beat // scoring moments of the latest step, shown one at a time
+	bi       int    // index of the beat on screen; len(beats) when finished
+	roundEnd bool   // the beats include the count: wait for a key between them
+	gen      int    // invalidates stale beat ticks
+	ledger   ledger
+	lastPlay string // text of the latest pegging beat
 
 	cursor int
 	sel    [6]bool // selected hand positions
@@ -64,6 +81,10 @@ func (m *Model) startGame() error {
 		return err
 	}
 	m.env, m.obs, m.done = env, r.Observation, r.Done
+	m.prevYou, m.prevOpp = r.Observation.YouScore, r.Observation.OpponentScore
+	m.gainYou, m.gainOpp = 0, 0
+	m.shownYou, m.shownOpp = 0, 0
+	m.ledger, m.lastPlay = ledger{}, ""
 	m.games++
 	m.cursor, m.sel, m.status = 0, [6]bool{}, ""
 	m.log = nil
@@ -71,6 +92,8 @@ func (m *Model) startGame() error {
 		m.addLog("--- new game ---")
 	}
 	m.logEvents(r.Events)
+	m.queueBeats(r.Events)
+	m.skipBeats() // an opening his heels is on the board straight away
 	return nil
 }
 
@@ -103,6 +126,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 	case tea.KeyPressMsg:
 		return m.handleKey(msg.String())
+	case beatTickMsg:
+		if msg.gen == m.gen && m.playing() && !m.roundEnd {
+			cmd := m.advance()
+			return m, cmd
+		}
+		return m, nil
 	}
 	return m, nil
 }
@@ -130,6 +159,9 @@ func (m Model) handleKey(k string) (tea.Model, tea.Cmd) {
 	case "end":
 		m.vp.GotoBottom()
 		return m, nil
+	}
+	if m.playing() {
+		return m.beatKey(k)
 	}
 	if m.done {
 		if k == "n" {
@@ -160,6 +192,7 @@ func (m Model) handleKey(k string) (tea.Model, tea.Cmd) {
 		m.toggle()
 	case "enter":
 		m.confirm()
+		return m, m.beatCmd()
 	}
 	return m, nil
 }
@@ -222,6 +255,9 @@ func (m *Model) step(in cribbage.ActionInput) {
 		m.status = r.Error.Message
 		return
 	}
+	m.gainYou = r.Observation.YouScore - m.obs.YouScore
+	m.gainOpp = r.Observation.OpponentScore - m.obs.OpponentScore
+	m.gainYou, m.gainOpp, m.lastPlay = 0, 0, ""
 	m.obs, m.done = r.Observation, r.Done
 	m.sel = [6]bool{}
 	if n := len(m.obs.YourHand); m.cursor >= n {
@@ -232,6 +268,97 @@ func (m *Model) step(in cribbage.ActionInput) {
 		m.addLog(m.obs.Prompt)
 		m.syncLog()
 	}
+	m.queueBeats(r.Events)
+}
+
+// queueBeats starts showing the scoring of an engine step.
+func (m *Model) queueBeats(evs []cribbage.Event) {
+	m.beats, m.roundEnd = buildBeats(evs)
+	m.gen++
+	m.bi = 0
+	if m.roundEnd {
+		l := m.ledger // replay on a copy for the log's one-line round result
+		for _, b := range m.beats {
+			l.add(b)
+		}
+		t := l.total()
+		m.addLog(fmt.Sprintf("Round result: You +%d, Opp +%d.", t[0], t[1]))
+		m.syncLog()
+	}
+	if len(m.beats) == 0 {
+		m.syncShown()
+		return
+	}
+	m.apply(m.beats[0])
+}
+
+// playing reports whether beats are still being shown (game input is ignored meanwhile).
+func (m Model) playing() bool { return m.bi < len(m.beats) }
+
+// counting reports whether the round-end counting panel is on screen.
+func (m Model) counting() bool { return m.playing() && m.roundEnd }
+
+// syncShown makes the board show the engine's scores.
+func (m *Model) syncShown() {
+	m.shownYou, m.shownOpp, m.shownDealer = m.obs.YouScore, m.obs.OpponentScore, m.obs.Dealer
+}
+
+// apply puts one beat on the board: the score moves and the ledger and play line update.
+func (m *Model) apply(b beat) {
+	m.gainYou, m.gainOpp = 0, 0
+	if b.points > 0 {
+		if b.who == "you" {
+			m.prevYou, m.shownYou, m.gainYou = m.shownYou, m.shownYou+b.points, b.points
+		} else {
+			m.prevOpp, m.shownOpp, m.gainOpp = m.shownOpp, m.shownOpp+b.points, b.points
+		}
+	}
+	m.ledger.add(b)
+	if b.kind == "play" || b.kind == "heels" || b.kind == "last_card" {
+		m.lastPlay = b.text
+	}
+}
+
+// advance moves to the next beat (or finishes) and returns the command that times it.
+func (m *Model) advance() tea.Cmd {
+	m.gen++
+	m.bi++
+	if m.playing() {
+		m.apply(m.beats[m.bi])
+	} else {
+		m.syncShown()
+	}
+	return m.beatCmd()
+}
+
+// skipBeats applies every remaining beat at once.
+func (m *Model) skipBeats() {
+	for m.playing() {
+		m.advance()
+	}
+	m.gen++
+}
+
+// beatCmd times the next pegging beat; counting beats wait for a key instead.
+func (m Model) beatCmd() tea.Cmd {
+	if !m.playing() || m.roundEnd {
+		return nil
+	}
+	gen := m.gen
+	return tea.Tick(beatDelay, func(time.Time) tea.Msg { return beatTickMsg{gen} })
+}
+
+// beatKey handles a key while beats are playing.
+func (m Model) beatKey(k string) (tea.Model, tea.Cmd) {
+	switch {
+	case k == "esc":
+		m.skipBeats()
+	case !m.roundEnd, k == "enter", k == "space", k == " ", k == "right", k == "l":
+		// pegging beats: any key skips ahead; counting beats: a next-step key
+		cmd := m.advance()
+		return m, cmd
+	}
+	return m, nil
 }
 
 // tooSmall reports whether the terminal is below the minimum size.

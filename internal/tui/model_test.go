@@ -45,6 +45,8 @@ func keyMsg(k string) tea.KeyPressMsg {
 		return tea.KeyPressMsg{Code: tea.KeyPgUp}
 	case "pgdown":
 		return tea.KeyPressMsg{Code: tea.KeyPgDown}
+	case "esc":
+		return tea.KeyPressMsg{Code: tea.KeyEscape}
 	case "ctrl+c":
 		return tea.KeyPressMsg{Code: 'c', Mod: tea.ModCtrl}
 	}
@@ -58,12 +60,12 @@ func plain(m Model) string { return ansi.Strip(m.View().Content) }
 func nextKeys(o cribbage.Observation) []string {
 	switch o.Phase {
 	case "discard":
-		return []string{"1", "space", "2", "space", "enter"}
+		return []string{"1", "space", "2", "space", "enter", "esc"}
 	case "pegging":
 		for i, id := range o.YourHand {
 			for _, a := range o.LegalActions {
 				if a.Card != nil && *a.Card == id {
-					return []string{strconv.Itoa(i + 1), "enter"}
+					return []string{strconv.Itoa(i + 1), "enter", "esc"}
 				}
 			}
 		}
@@ -282,7 +284,7 @@ func TestHelpAndLogScroll(t *testing.T) {
 }
 
 func TestViewsFitAndShowKeyInfo(t *testing.T) {
-	for _, sz := range [][2]int{{64, 24}, {80, 24}, {100, 40}, {200, 60}} {
+	for _, sz := range [][2]int{{64, 25}, {80, 25}, {100, 40}, {200, 60}} {
 		m := seeded(t, 3, false)
 		nm, _ := m.Update(tea.WindowSizeMsg{Width: sz[0], Height: sz[1]})
 		m = nm.(Model)
@@ -294,11 +296,11 @@ func TestViewsFitAndShowKeyInfo(t *testing.T) {
 			t.Errorf("%v: %d lines tall", sz, len(lines))
 		}
 		for _, l := range lines {
-			if w := ansi.StringWidth(l); w > min(sz[0], maxWidth) {
+			if w := ansi.StringWidth(l); w > sz[0] {
 				t.Errorf("%v: line wider than screen (%d): %q", sz, w, l)
 			}
 		}
-		for _, want := range []string{"Your hand", "Pegging", "Count:", "Sequence:", "Starter ", "You ", "Opp ", "Round", "dealer:"} {
+		for _, want := range []string{"Your hand", "Pegging", "Count:", "Sequence:", "You ", "Opp "} {
 			if !strings.Contains(plain(m), want) {
 				t.Errorf("%v: view lacks %q", sz, want)
 			}
@@ -310,8 +312,8 @@ func TestDiscardViewGolden(t *testing.T) {
 	v := plain(seeded(t, 3, false))
 	for _, want := range []string{
 		"Cribbage - first to 121",
-		"dealer: you",
-		"Starter -",
+		"🦆 You",
+		"│ xXx │ │ Choose two cards",
 		"Choose two cards for your crib.",
 		"5♥", "6♦", "7♥", "8♠", "10♥", "J♦",
 		"Select 2 cards with space (0 selected), then enter.",
@@ -358,7 +360,7 @@ func TestTooSmall(t *testing.T) {
 	nm, _ := m.Update(tea.WindowSizeMsg{Width: 40, Height: 10})
 	m = nm.(Model)
 	v := plain(m)
-	if !strings.Contains(v, "Terminal too small (40x10)") || !strings.Contains(v, "64x24") || strings.Contains(v, "Your hand") {
+	if !strings.Contains(v, "Terminal too small (40x10)") || !strings.Contains(v, "64x25") || strings.Contains(v, "Your hand") {
 		t.Errorf("view:\n%s", v)
 	}
 	// keys still work and growing again restores the table

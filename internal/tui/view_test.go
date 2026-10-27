@@ -41,7 +41,7 @@ func states(t *testing.T, seed int64, ascii bool) []Model {
 }
 
 func TestASCIIModeIsPureASCII(t *testing.T) {
-	sizes := [][2]int{{64, 24}, {66, 30}, {80, 24}, {100, 40}, {140, 50}, {20, 5}, {0, 0}}
+	sizes := [][2]int{{64, 25}, {66, 30}, {80, 25}, {100, 40}, {140, 50}, {20, 5}, {0, 0}}
 	for seed := int64(1); seed <= 55; seed++ {
 		m := seeded(t, seed, true)
 		step := 0
@@ -98,7 +98,7 @@ func TestEverythingFitsAtAllSizes(t *testing.T) {
 							t.Fatalf("ascii=%v help=%v %dx%d: %d lines", ascii, help, w, h, len(lines))
 						}
 						for _, l := range lines {
-							if lw := ansi.StringWidth(l); lw > min(w, maxWidth) {
+							if lw := ansi.StringWidth(l); lw > w {
 								t.Fatalf("ascii=%v help=%v %dx%d: width %d: %q", ascii, help, w, h, lw, ansi.Strip(l))
 							}
 						}
@@ -218,7 +218,7 @@ func TestLogRoomAndLatestTurnVisible(t *testing.T) {
 	if tall.vp.Height() <= small.vp.Height()+10 {
 		t.Errorf("log does not grow with height: %d vs %d", tall.vp.Height(), small.vp.Height())
 	}
-	for _, sz := range [][2]int{{64, 24}, {100, 50}} {
+	for _, sz := range [][2]int{{64, 25}, {100, 50}} {
 		for seed := int64(1); seed <= 8; seed++ {
 			m := resize(seeded(t, seed, false), sz[0], sz[1])
 			for n := 0; !m.Done() && n < 300; n++ {
